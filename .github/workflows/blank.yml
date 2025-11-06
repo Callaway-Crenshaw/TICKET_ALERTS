@@ -1,0 +1,28 @@
+name: Scheduled Alert Runner
+
+on:
+  # 1. Manual Trigger: Allows you to run it anytime from the GitHub UI
+  workflow_dispatch:
+  
+  # 2. Scheduled Trigger: Runs the workflow every 15 minutes, Mon-Fri (Optimized)
+  schedule:
+    # Set to Mon-Fri (1-5) to avoid unnecessary weekend usage
+    - cron: '*/15 * * * 1-5' 
+
+jobs:
+  ci_pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # 1. CONSOLIDATED STEP: Create config.py from the SINGLE GitHub Secret
+      - name: Configure Environment File (From FULL_CONFIG_SECRETS)
+        run: |
+          # This command overwrites any previous content and creates the file
+          # The secret MUST contain ALL variables, correctly formatted for Python.
+          echo "${{ secrets.FULL_CONFIG_SECRETS }}" > config.py
+
+      - name: Run ConnectWise Alert Script
+        # Renamed step and using the correct script name
+        run: python connectwise_alert.py
