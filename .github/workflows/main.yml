@@ -14,8 +14,7 @@ jobs:
     
     # This block must use 2-space indentation
     permissions:
-      contents: read
-      variables: write 
+      contents: write 
     
     env:
       LAST_RUN_ID: ${{ vars.LAST_RUN_ID }}
