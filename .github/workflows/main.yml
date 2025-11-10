@@ -54,7 +54,8 @@ jobs:
             
             console.log(`Attempting to save ID: ${newId}`);
             
-            await github.rest.actions.updateVariable({
+            // 💥 FIX: Changing updateVariable to the explicit updateRepoVariable
+            await github.rest.actions.updateRepoVariable({ 
               owner: context.repo.owner,
               repo: context.repo.repo,
               name: 'LAST_RUN_ID',
