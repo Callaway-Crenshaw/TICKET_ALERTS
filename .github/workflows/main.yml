@@ -12,18 +12,47 @@ jobs:
   run_alert_script:
     runs-on: ubuntu-latest
     
-    # 💥 FINAL PERMISSIONS FIX: Requesting explicit 'actions: write' permission 💥
+    # Permission for committing a file change
+    # NOTE: The file-based persistence requires 'contents: write' permission.
     permissions:
-      contents: read  # Still need read access for checkout
-      actions: write  # Explicitly grant write access for variables endpoint
+      contents: write 
     
-    # 1. Fetch the simple LAST_RUN_ID variable directly
-    env:
-      LAST_RUN_ID: ${{ vars.LAST_RUN_ID }}
-
+    # No longer using 'vars.LAST_RUN_ID' here as we read from a file.
+    
     steps:
       - name: ⬇️ Checkout Repository
         uses: actions/checkout@v4
+
+      # --- NEW STEP: Read the Last ID from the File ---
+      - name: ⚙️ Read LAST_RUN_ID from File
+        id: read_id
+        # Use actions/github-script to read the file content and set it as an output
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            try {
+              // Read the content of the file
+              const lastId = fs.readFileSync('last_run_id.txt', 'utf8').trim();
+              console.log(`Read ID from file: ${lastId}`);
+              // Set the output for use in the environment block
+              core.setOutput('id', lastId);
+            } catch (error) {
+              // If the file doesn't exist (first run), default to 0
+              console.log("last_run_id.txt not found. Defaulting to 0.");
+              core.setOutput('id', '0');
+            }
+          # This token is needed for the script environment, but not for file I/O
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # --- Use the ID read from the file ---
+      - name: 🔑 Set Environment Variables (LAST_RUN_ID)
+        env:
+          # Use the output from the previous step to set the environment variable
+          LAST_RUN_ID: ${{ steps.read_id.outputs.id }}
+        run: |
+          echo "LAST_RUN_ID=${{ steps.read_id.outputs.id }}" >> $GITHUB_ENV
+          echo "Current LAST_RUN_ID set to ${{ steps.read_id.outputs.id }} for Python script."
 
       - name: 🐍 Set up Python 3.x
         uses: actions/setup-python@v5
@@ -36,7 +65,6 @@ jobs:
           pip install requests 
 
       - name: 🔑 Set Environment Variables (Secrets)
-        id: set_secrets
         run: |
           echo "Setting environment variables from FULL_CONFIG_SECRETS..."
           echo "${{ secrets.FULL_CONFIG_SECRETS }}" >> "$GITHUB_ENV"
@@ -47,23 +75,15 @@ jobs:
         run: python connectwise_alert.py
         shell: bash
 
-      - name: 💾 Save Last Processed ID for Next Run
+      # --- NEW STEP: Commit the File Change ---
+      - name: 💾 Commit Last Processed ID File
+        # Python script MUST have updated 'last_run_id.txt' before this step runs
         if: ${{ success() && steps.run_script.outputs.next_id != '' }}
-        uses: actions/github-script@v7
+        uses: stefanprodan/commit-action@v5
         with:
-          # ⚠️ WARNING FIX: Changed 'token' to 'github-token'
-          github-token: ${{ secrets.GITHUB_TOKEN }} 
-          
-          script: |
-            const newId = '${{ steps.run_script.outputs.next_id }}';
-            
-            console.log(`Attempting to save ID: ${newId}`);
-            
-            // Function updateRepoVariable is correct (fixes the TypeError)
-            await github.rest.actions.updateRepoVariable({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              name: 'LAST_RUN_ID',
-              value: newId
-            });
-            console.log(`✅ Successfully updated LAST_RUN_ID repository variable to ${newId}.`);
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # The file created/updated by the Python script
+          commit_message: 'ci: Update LAST_RUN_ID to ${{ steps.run_script.outputs.next_id }}'
+          files: last_run_id.txt
+          branch: main # CHANGE TO 'master' or your default branch name if different
+          allow_empty: false
