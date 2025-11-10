@@ -17,8 +17,7 @@ jobs:
     # 2. Get the last processed ID from the previous run's output
     # This uses the 'last_run_id' saved by the 'save_last_id' job
     env:
-      LAST_RUN_ID: ${{ fromJson(vars.LAST_RUN_ID_CACHE)[github.workflow] }}
-
+      LAST_RUN_ID: ${{ fromJson(vars.LAST_RUN_ID_CACHE)[github.workflow] ?? '0' }}
     steps:
       - name: ⬇️ Checkout Repository
         uses: actions/checkout@v4
