@@ -138,21 +138,14 @@ if __name__ == "__main__":
     
     print("--- ConnectWise Ticket Alert Script Started ---")
     
-    # 1. NEW LOGIC: Read from Environment Variable (for GitHub/Cloud persistence)
-    # Default is 0 if not found or empty
+    # Read the LAST_RUN_ID set by the GitHub workflow's file-reading step.
+    # It will default to 0 if the environment variable is not set.
     last_id = int(os.environ.get('LAST_RUN_ID', 0))
 
-    # 2. Fallback: If ENV is 0, try to read the local file (for local VS Code testing)
-    if last_id == 0:
-        try:
-            with open('last_run_id.txt', 'r') as f:
-                last_id_content = f.read().strip()
-                last_id = int(last_id_content) if last_id_content.isdigit() else 0
-        except Exception:
-            # If file doesn't exist, last_id remains 0
-            pass 
+    # This fallback logic is now unnecessary because the workflow handles reading the file,
+    # but we'll keep it simple by relying solely on the environment variable set by the workflow.
     
-    print(f"Last processed ID: {last_id} (Source: {'Environment Variable' if os.environ.get('LAST_RUN_ID') else 'Local File/Default'})")
+    print(f"Last processed ID: {last_id} (Source: Environment Variable from last_run_id.txt)")
 
     # 2. Get ALL tickets matching the criteria
     all_matching_tickets = get_all_matching_tickets()
@@ -200,28 +193,31 @@ if __name__ == "__main__":
         # B. Send to SMS via Email Gateway 
         sms_success = send_email(consolidated_subject, consolidated_body, SMS_RECIPIENT_EMAIL)
         
-    # --- UPDATE LAST ID LOGIC (The Fix for Repeating Alerts) ---
+    # --- UPDATE LAST ID LOGIC (The Fix for File Persistence) ---
     
-    # FIX: Use the recommended GITHUB_OUTPUT file for persistence
     if last_successfully_formatted_id > 0:
         
-        # 1. Write the output to the GITHUB_OUTPUT file
+        # 1. Write the output to the GITHUB_OUTPUT file 
+        # (This is needed for the commit message in the next workflow step)
         if 'GITHUB_OUTPUT' in os.environ:
             try:
                 # Write output to the file in the format key=value
                 with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
                     f.write(f"next_id={last_successfully_formatted_id}\n")
-                print(f"✅ New highest ticket ID processed: {last_successfully_formatted_id}. This value will be saved for the next run.")
+                print(f"✅ New highest ticket ID processed: {last_successfully_formatted_id} (Set as next_id output).")
             except Exception as e:
                 print(f"🛑 ERROR: Could not write next_id to GITHUB_OUTPUT file. Error: {e}")
         
-        # 2. Revert to local file writing for local testing only 
-        if not os.environ.get('LAST_RUN_ID'):
-            try:
-                with open('last_run_id.txt', 'w') as f:
-                    f.write(str(last_successfully_formatted_id))
-            except Exception as e:
-                print(f"🛑 ERROR: Could not write last processed ID to file (Local Test Only). Error: {e}")
+        # 2. CRITICAL FIX for File Persistence: Always write the new ID to the local file 
+        # This file will be picked up and committed by git-auto-commit-action
+        try:
+            with open('last_run_id.txt', 'w') as f:
+                f.write(str(last_successfully_formatted_id))
+            print("✅ Wrote new ID to last_run_id.txt for commit.")
+        except Exception as e:
+            # This should only fail if permissions are extremely restricted, 
+            # but usually GitHub Actions allows writing to the workspace.
+            print(f"🛑 ERROR: Could not write last processed ID to file for commit. Error: {e}")
         
     elif new_tickets:
         print("⚠️ No new ID to log, perhaps ticket IDs were not integers.")
@@ -251,3 +247,4 @@ if __name__ == "__main__":
             send_slack_webhook(no_ticket_title, no_ticket_body, color=3066993, webhook_url=SLACK_WEBHOOK_URL_REGULAR) 
             
     print("--- Script Finished ---")
+
