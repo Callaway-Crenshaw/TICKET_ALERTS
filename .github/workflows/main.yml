@@ -24,13 +24,11 @@ steps:
   - name: ⬇️ Checkout Repository
     uses: actions/checkout@v4
     with:
-      fetch-depth: 0 # Set to 0 to perform a full clone. This helps bypass
-                     # transient 500 errors related to fetching shallow history.
+      fetch-depth: 0 # Full clone to bypass transient 500 errors.
 
-  # --- NEW STEP: Read the Last ID from the File ---
+  # --- Read the Last ID from the File ---
   - name: ⚙️ Read LAST_RUN_ID from File
     id: read_id
-    # Use actions/github-script to read the file content and set it as an output
     uses: actions/github-script@v7
     with:
       script: |
@@ -79,7 +77,7 @@ steps:
     run: python connectwise_alert.py
     shell: bash
 
-  # --- NEW STEP: Commit the File Change ---
+  # --- Commit the File Change ---
   - name: 💾 Commit Last Processed ID File
     # Python script MUST have updated 'last_run_id.txt' before this step runs
     if: ${{ success() && steps.run_script.outputs.next_id != '' }}
@@ -91,3 +89,4 @@ steps:
       files: last_run_id.txt
       branch: main # CHANGE TO 'master' or your default branch name if different
       allow_empty: false
+
